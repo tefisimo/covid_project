@@ -53,3 +53,119 @@ FROM CovidProject..CovidDeaths
 WHERE continent IS NOT NULL
 GROUP BY location
 ORDER BY DeathCount DESC 
+
+
+-- Ok, lets break things down by continent
+-- Showing continents with the highest death count per population
+
+SELECT continent, MAX(CAST(Total_deaths as int)) AS TotalDeathCount
+FROM CovidProject..CovidDeaths
+WHERE continent is not null 
+GROUP by continent
+ORDER by TotalDeathCount desc
+
+
+-- Lets see global numbers
+
+SELECT SUM(new_cases) as total_cases, SUM(CAST(new_deaths AS INT)) AS total_deaths, SUM(CAST(new_deaths AS INT))/SUM(New_Cases)*100 AS DeathPercentage
+FROM CovidProject..CovidDeaths
+WHERE continent is not null 
+ORDER BY 1,2
+
+
+-- Lest join my tables
+-- Total Population vs Vaccinations
+-- Shows Percentage of Population that has recieved at least one Covid Vaccine
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date ) as RollingPeopleVaccinated
+FROM CovidProject..CovidDeaths dea
+JOIN CovidProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+WHERE dea.continent is not null 
+ORDER BY 2,3
+
+
+
+-- Using CTE to perform Calculation on Partition By in previous query
+
+WITH PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+AS
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+FROM CovidProject..CovidDeaths dea
+JOIN CovidProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+WHERE dea.continent is not null 
+)
+SELECT *, (RollingPeopleVaccinated/Population)*100 AS PercentPeopleVaccinated
+FROM PopvsVac
+
+
+
+-- Using Temp Table to perform Calculation on Partition By in previous query
+
+CREATE Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+
+INSERT INTO #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM CovidProject..CovidDeaths dea
+JOIN CovidProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+WHERE dea.continent is not null 
+
+SELECT *, (RollingPeopleVaccinated/Population)*100 AS PercentPeopleVaccinated
+FROM #PercentPopulationVaccinated
+
+
+
+-- Editing my Temp Table
+
+DROP Table if exists #PercentPopulationVaccinated
+CREATE Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+
+INSERT INTO #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+FROM CovidProject..CovidDeaths dea
+JOIN CovidProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+-- WHERE dea.continent is not null 
+
+SELECT *, (RollingPeopleVaccinated/Population)*100 AS PercentPeopleVaccinated
+FROM #PercentPopulationVaccinated
+
+
+-- Creating View to store data for later visualizations
+
+Create View PercentPopulationVaccinated as
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+FROM CovidProject..CovidDeaths dea
+JOIN CovidProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null
